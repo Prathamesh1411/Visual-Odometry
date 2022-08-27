@@ -1,16 +1,12 @@
 # Visual Odometry using Classical Computer Vision
 
-### *RBE 549: Computer Vision - Worcester Polytechnic Institute, Fall 2021*
-### Team Megatron (Team M)
-### Members: Aniket Patil, Chinmay Todankar, Nihal Navale, Prathamesh Bhamare
-
 --------------------------------------------------------------
 
 ## What is Visual Odometry?
 
 Visual odometry (VO) is the process of determining the position and orientation (ego-motion) of a robot/agent by analyzing images taken from a monocular or stereo camera system attached to the robot/agent. Visual Odometry operates by estimating the pose of the robot/agent by analyzing the changes that motion induces on the images of its onboard cameras.
 
-## Our Implementation:
+## Implementation:
 
 ![trajectoryVideoGIF](vo_final_results.gif)
 
@@ -40,7 +36,7 @@ Once downloaded, extract the Sequences folder into the Dataset folder such that 
   g++ -g src/main.cpp -o src/build/main `pkg-config --cflags --libs opencv4`
   ```
 
-## Our Results (Trajectory images and error plots):
+## Results (Trajectory images and error plots):
 
 ![Results](https://user-images.githubusercontent.com/83787152/146295990-5f2f34e7-a012-4e1c-9113-e64d5370c9a5.png)
 
