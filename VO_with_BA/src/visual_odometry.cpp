@@ -39,8 +39,8 @@ int VO::read_img(int id, cv::Mat &left_img, cv::Mat &right_img)
     left_address = this->dataset_ + "image_0/" + image_name + ".png";
     right_address = this->dataset_ + "image_1/" + image_name + ".png";
 
-    left_img = cv::imread(left_address, CV_LOAD_IMAGE_GRAYSCALE);
-    right_img = cv::imread(right_address, CV_LOAD_IMAGE_GRAYSCALE);
+    left_img = cv::imread(left_address, cv::IMREAD_GRAYSCALE);
+    right_img = cv::imread(right_address, cv::IMREAD_GRAYSCALE);
 
     if (!left_img.data)
     {
@@ -51,7 +51,7 @@ int VO::read_img(int id, cv::Mat &left_img, cv::Mat &right_img)
     return 0;
 }
 
-int VO::feature_detection(const cv::Mat &img, std::vector<cv::Keypoint> &keypoints, cv::Mat &descriptors)
+int VO::feature_detection(const cv::Mat &img, std::vector<cv::KeyPoint> &keypoints, cv::Mat &descriptors)
 {
     if (!img.data)
     {
@@ -72,7 +72,7 @@ int VO::feature_detection(const cv::Mat &img, std::vector<cv::Keypoint> &keypoin
     return 0;
 }
 
-void VO::adaptive_non_maximal_suppresion(std::vector<cv::Keypoints> &keypoints, const int num)
+void VO::adaptive_non_maximal_suppresion(std::vector<cv::KeyPoint> &keypoints, const int num)
 {
     // if number of keypoints is already lower than the threshold, return
     if (keypoints.size() < num)
@@ -142,12 +142,12 @@ int VO::disparity_map(const Frame &frame, cv::Mat &disparity)
     return 0;
 }
 
-std::vector<bool> VO::set_ref_3d_position(std::vector<cv::Point3f> &pts_3d, std::vector<cv::Keypoint> &keypoints,
+std::vector<bool> VO::set_ref_3d_position(std::vector<cv::Point3f> &pts_3d, std::vector<cv::KeyPoint> &keypoints,
                                         cv::Mat &descriptors, Frame &frame)
 {
     pts_3d.clear();
     cv::Mat descriptors_last_filtered;
-    std::vector<cv::Keypoint> keypoints_last_filtered;
+    std::vector<cv::KeyPoint> keypoints_last_filtered;
     std::vector<bool> reliable_depth;
 
     for(size_t i = 0; i < keypoints.size(); i++)
@@ -226,7 +226,7 @@ void VO::motion_estimation(Frame &frame)
     cv::Mat rvec, tvec, inliers;
     cv::solvePnPRansac(pts3d, pts2d, K, cv::Mat(), rvec, tvec, false, 100, 4.0, 0.99, inliers);
 
-    num_inliers_ = inliers.row;
+    num_inliers_ = inliers.rows;
 
     cv::Mat SO3_R_cv;
     cv::Rodrigues(rvec, SO3_R_cv);
@@ -276,7 +276,7 @@ bool VO::check_motion_estimation()
     return true;
 }
 
-bool VO::insert_key_frame(bool check, std::vector<cv::Point3f> &pts_3d, std::vector<cv::Keypoint> &keypoints, cv::Mat &descriptors)
+bool VO::insert_key_frame(bool check, std::vector<cv::Point3f> &pts_3d, std::vector<cv::KeyPoint> &keypoints, cv::Mat &descriptors)
 {
     if ((num_inliers_ >= 80 && T_c_l_.angleY() < 0.03) || check == false){ return false; }
     frame_current_ .is_keyframe_ = true;
@@ -292,6 +292,95 @@ bool VO::insert_key_frame(bool check, std::vector<cv::Point3f> &pts_3d, std::vec
 
     disparity_map(frame_current_, frame_current_.disparity_);
     std::vector<bool> reliable_depth = set_ref_3d_position(pts_3d, keypoints, descriptors, frame_current_);
-    
+
+    // calculate the world coordinate
+    // no relative motion any more
+
+    int feature_id = frame_current_.features_.size();
+    for(int i = 0; i < keypoints.size(); i++)
+    {
+        bool exist = false;
+        for(auto &feat : frame_current_.features_)
+        {
+            if(feat.keypoint_.pt.x == keypoints.at(i).pt.x && feat.keypoint_.pt.y == keypoints.at(i).pt.y)
+            {
+                exist = true;
+                if((my_map_.landmarks_.at(feat.landmark_id_).reliable_depth_ = false) && (reliable_depth.at(i) == true))
+                {
+                    my_map_.landmarks_.at(feat.landmark_id_).pt_3d_ = pts_3d.at(i);
+                    my_map_.landmarks_.at(feat.landmark_id_).reliable_depth_ = true;
+                }
+            }
+        }
+
+        if(exist == false)
+        {
+            // add this feature
+            // put the features into the frame with feature_id, frame_id, keypoint, descriptor
+            // build the connection from feature to frame
+            Feature feature_to_add(feature_id, frame_current_.frame_id_, keypoints.at(i), descriptors.row(i));
+            feature_to_add.landmark_id_ = curr_landmark_id_;
+            frame_current_.features_.push_back(feature_to_add);
+            // create a landmark
+            // build the connection from landmark to feature
+            Observation observation(frame_current_.keyframe_id_, feature_id);
+            Landmark landmark_to_add(curr_landmark_id_, pts_3d.at(i), descriptors.row(i), reliable_depth.at(i), observation);
+            curr_landmark_id_ ++;
+            my_map_.insert_landmark(landmark_to_add);
+            feature_id++;
+        }
+    }
+    curr_keyframe_id_++;
+    // insert the keyframe
+    my_map_.insert_keyframe(frame_current_);
+    return true;
 }
+
+void VO::move_frame()
+{
+    frame_last_ = frame_current_;
+}
+
+void VO::rviz_visualize()
+{
+    std::vector<cv::Point3f> pts_3d;
+    pts_3d.clear();
+    for(auto &lm : my_map_.landmarks_)
+    {
+        pts_3d.push_back(lm.second.pt_3d_);
+    }
+    my_visual_.publish_feature_map(pts_3d);
+    my_visual_.publish_transform(T_c_w_);
+    ros::spinOnce();
+}
+
+void VO::write_pose(const Frame &frame)
+{
+    SE3 T_w_c;
+    T_w_c = frame.T_c_w_.inverse();
+    double r00, r01, r02, r10, r11, r12, r20, r21, r22, x, y, z;
+    Eigen::Matrix3d rotation = T_w_c.rotationMatrix();
+    Eigen::Vector3d translation = T_w_c.translation();
+    r00 = rotation(0, 0);
+    r01 = rotation(0, 1);
+    r02 = rotation(0, 2);
+    r10 = rotation(1, 0);
+    r11 = rotation(1, 1);
+    r12 = rotation(1, 2);
+    r20 = rotation(2, 0);
+    r21 = rotation(2, 1);
+    r22 = rotation(2, 2);
+    x = translation(0);
+    y = translation(1);
+    z = translation(2);
+
+    std::ofstream file;
+    file.open("estimated_traj.txt", std::ios_base::app);
+    file << frame.frame_id_ << " " << r00 << " " << r01 << " " << r02 << " " << x << " "
+         << r10 << " " << r11 << " " << r12 << " " << y << " "
+         << r20 << " " << r21 << " " << r22 << " " << z << std::endl;
+    file.close();
+}
+
+
 };
