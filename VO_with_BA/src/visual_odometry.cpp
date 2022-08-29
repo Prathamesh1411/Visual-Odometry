@@ -382,5 +382,45 @@ void VO::write_pose(const Frame &frame)
     file.close();
 }
 
+bool VO::initialization()
+{
+    frame_last_ = Frame();
+    read_img(0, frame_last_.left_img_, frame_last_.right_img_);
+    frame_last_.frame_id_ = 0;
 
+    std::vector<cv::KeyPoint> keypoints_detected;
+    cv::Mat descriptors_detected;
+    std::vector<cv::Point3f> pts_3d;
+
+    feature_detection(frame_last_.left_img_, keypoints_detected, descriptors_detected);
+    disparity_map(frame_last_, frame_last_.disparity_);
+    std::vector<bool> reliable_depth = set_ref_3d_position(pts_3d, keypoints_detected, descriptors_detected, frame_last_);
+
+    for (int i = 0; i < keypoints_detected.size(); i++)
+    {
+        // put the features into the frame with feature_id, frame_id, keypoint, descriptor
+        // build the connection from feature to frame
+        Feature feature_to_add(i, 0, keypoints_detected.at(i), descriptors_detected.row(i));
+        // build the connection from feature to landmark
+        feature_to_add.landmark_id_ = curr_landmark_id_;
+        frame_last_.features_.push_back(feature_to_add);
+        // create a landmark
+        // build the connection from landmark to feature
+        // this 0 is also the keyframe id
+        Observation observation(0, i);
+        Landmark landmark_to_add(curr_landmark_id_, pts_3d.at(i), descriptors_detected.row(i), reliable_depth.at(i), observation);
+        curr_landmark_id_++;
+        // insert the landmark
+        my_map_.insert_landmark(landmark_to_add);
+    }
+
+    // fill the extra information
+    frame_last_.fill_frame(SE3(), true, curr_keyframe_id_);
+    curr_keyframe_id_++;
+
+    // insert the keyframe
+    my_map_.insert_keyframe(frame_last_);
+
+    return true;
+}
 };
