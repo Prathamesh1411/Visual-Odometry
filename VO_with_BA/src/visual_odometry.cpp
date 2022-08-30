@@ -423,4 +423,60 @@ bool VO::initialization()
 
     return true;
 }
+
+bool VO::tracking(bool &if_insert_keyframe)
+{
+    frame_current_ = Frame();
+    if(frame_last_.is_keyframe_ == true)
+    {
+        frame_last_ = my_map_.keyframes_.at(frame_last_.keyframe_id_);
+    }
+
+    read_img(seq_, frame_current_.left_img_, frame_current_.right_img_);
+    frame_current_.frame_id_ = seq_;
+
+    std::vector<cv::KeyPoint> keypoints_detected;
+    cv::Mat descriptors_detected;
+    feature_detection(frame_current_.left_img_, keypoints_detected, descriptors_detected);
+
+    std::vector<cv::DMatch> feature_matches;
+    
+    cv::Mat descriptors_last;
+    std::vector<cv::KeyPoint> keypoints_last;
+    for(int i = 0; i < frame_last_.features_.size(); i++)
+    {
+        descriptors_last.push_back(frame_last_.features_.at(i).descriptor_);
+        keypoints_last.push_back(frame_last_.features_.at(i).keypoint_);
+    }
+
+    feature_matching(descriptors_last, descriptors_detected, feature_matches);
+
+    for(int i = 0; i < feature_matches.size(); i++)
+    {
+        Feature feature_to_add(i, seq_,
+                               keypoints_detected.at(feature_matches.at(i).trainIdx),
+                               descriptors_detected.row(feature_matches.at(i).trainIdx));
+        feature_to_add.landmark_id_ = frame_last_.features_.at(feature_matches.at(i).queryIdx).landmark_id_;
+        frame_current_.features_.push_back(feature_to_add);
+    }
+
+    motion_estimation(frame_current_);
+    frame_current_.T_c_w_ = T_c_w_;
+    T_c_l_ =  frame_current_.T_c_w_ * frame_last_.T_c_w_.inverse();
+    bool check = check_motion_estimation();
+    std::vector<cv::Point3f> pts_3d;
+    if_insert_keyframe = insert_key_frame(check, pts_3d, keypoints_detected, descriptors_detected);
+
+    if (check)
+    {
+        if(if_rviz_)
+        {
+            rviz_visualize();
+        }
+        move_frame();
+    }
+
+    seq++;
+    return check;
+}
 };
