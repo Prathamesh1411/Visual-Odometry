@@ -479,4 +479,56 @@ bool VO::tracking(bool &if_insert_keyframe)
     seq++;
     return check;
 }
-};
+
+bool VO::pipeline(bool &if_insert_keyframe)
+{
+    switch (state_)
+    {
+    case Init:
+    {
+        if(initialization())
+        {
+            state_ = Track;
+        }
+        else
+        {
+            num_lost_++;
+            if(num_lost_ > 10)
+            {
+                state_ = Lost;
+            }
+        }
+        break;
+    }
+
+    case Track:
+    {
+        if(tracking(if_insert_keyframe))
+        {
+            num_lost_ = 0;
+        }
+
+        else
+        {
+            num_lost_++;
+            if (num_lost_ > 10) state_ = Lost;
+        }
+        break;
+    }
+    case Lost:
+    {
+        std::cout << "VO IS LOST" << std::endl;
+        return false;
+        break;
+    }
+    default:
+        std::cout << "Invalid state" << std::endl;
+        return false;
+        break;
+    }
+
+    ros::spinOnce();
+    return true;
+}
+
+} //namespace vslam
