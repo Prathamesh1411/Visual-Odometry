@@ -100,5 +100,23 @@ void optimize_map(std::unordered_map<unsigned long, Frame> &keyframes, std::unor
 {
     typedef g2o::BlockSolver_6_3 BlockSolverType;
     typedef g2o::LinearSolverCSparse<BlockSolverType::PoseMatrixType> LinearSolverType;
+    auto solver = new g2o::OptimizationAlgorithmLevenberg(g2o::make_unique<BlockSolverType>(g2o::make_unique<LinearSolverType>()));
+    g2o::SparseOptimizer optimizer;
+    optimizer.setAlgorithm(solver);
+
+    // add poses as vertices
+    std::map<unsigned long, VertexPose*> vertices;
+    unsigned long max_kf_id = 0;
+
+    for(auto &keyframe : keyframes)
+    {
+        Frame kf = keyframe.second;
+        VertexPose *vertex_pose = new VertexPose();
+        vertex_pose->setId(kf.keyframe_id_);
+        vertex_pose->setEstimate(kf.T_c_w_);
+        optimizer.addVertex(vertex_pose);
+
+    }
+
 }
 } //namespace vslam

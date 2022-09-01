@@ -35,7 +35,7 @@ public:
     virtual void setToOriginImpl() override {_estimate = Sophus::SE3d();}
     virtual void oplusImpl(const double *update) override;
     virtual bool read(std::istream &in) override {}
-    virtual bool write(std::ostream &out) override {}
+    virtual bool write(std::ostream &out) const override {}
 };
 
 //define the landmark
