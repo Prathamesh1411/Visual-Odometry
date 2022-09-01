@@ -75,4 +75,30 @@ void PoseOnlyEdgeProjection::computeError()
     pos_pixel /= pos_pixel[2];
     _error = _measurement - pos_pixel.head<2>();
 }
+
+void PoseOnlyEdgeProjection::linearizeOplus()
+{
+    const VertexPose *v = static_cast<VertexPose *>(_vertices[0]);
+    Sophus::SE3d T = v->estimate();
+    Eigen::Vector3d pos_cam = T * point_3d_;
+    double fx = K_(0, 0);
+    double fy = K_(1, 1);
+    double cx = K_(0, 2);
+    double cy = K_(1, 2);
+    double X = pos_cam[0];
+    double Y = pos_cam[1];
+    double Z = pos_cam[2];
+    double Z2 = Z * Z;
+    _jacobianOplusXi
+        << -fx / Z,
+        0, fx * X / Z2, fx * X * Y / Z2, -fx - fx * X * X / Z2, fx * Y / Z,
+        0, -fy / Z, fy * Y / (Z * Z), fy + fy * Y * Y / Z2, -fy * X * Y / Z2, -fy * X / Z;
+}
+
+void optimize_map(std::unordered_map<unsigned long, Frame> &keyframes, std::unordered_map<unsigned long, Landmark> &landmarks,
+                const cv::Mat &K, bool if_update_map, bool if_update_landmark, int num_ite)
+{
+    typedef g2o::BlockSolver_6_3 BlockSolverType;
+    typedef g2o::LinearSolverCSparse<BlockSolverType::PoseMatrixType> LinearSolverType;
+}
 } //namespace vslam
