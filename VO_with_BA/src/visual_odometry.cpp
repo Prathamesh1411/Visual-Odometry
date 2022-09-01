@@ -476,7 +476,7 @@ bool VO::tracking(bool &if_insert_keyframe)
         move_frame();
     }
 
-    seq++;
+    seq_++;
     return check;
 }
 
