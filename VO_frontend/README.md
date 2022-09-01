@@ -6,6 +6,10 @@
 
 Visual odometry (VO) is the process of determining the position and orientation (ego-motion) of a robot/agent by analyzing images taken from a monocular or stereo camera system attached to the robot/agent. Visual Odometry operates by estimating the pose of the robot/agent by analyzing the changes that motion induces on the images of its onboard cameras.
 
+## VO Flowchart:
+
+![flowchart](Flowchart.png)
+
 ## Implementation:
 
 ![trajectoryVideoGIF](vo_final_results.gif)
